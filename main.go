@@ -32,6 +32,10 @@ var (
 	windowStyle       = lipgloss.NewStyle().BorderForeground(highlightColor).Padding(2, 0).Align(lipgloss.Center).Border(lipgloss.NormalBorder()).UnsetBorderTop()
 )
 
+func setTerminalTitle(title string) {
+	fmt.Fprintf(os.Stdout, "\033]0;%s\007", title)
+}
+
 type model struct {
 	Tabs                     []string
 	ActiveTab                int
@@ -86,6 +90,12 @@ func (m model) getDurationByIndex(index int) time.Duration {
 	}
 }
 
+func (m *model) getTimeLeft(modeIndex int) time.Duration {
+	modeDuration := m.getDurationByIndex(modeIndex)
+	timeLeft := modeDuration - m.ProgressCurrentTime
+	return timeLeft
+}
+
 func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg {
 		return tickMsg{}
@@ -111,6 +121,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "r":
 			m.resetProgress()
+			// Reset title to `pomodoro`
+			setTerminalTitle("pomodoro")
 			return m, nil
 		case "right", "d", "tab":
 			m.ActiveTab = min(m.ActiveTab+1, len(m.Tabs)-1)
@@ -128,6 +140,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.ProgressMode == m.ActiveTab {
 				if m.ProgressStatus == Running {
 					m.ProgressStatus = Paused
+					setTerminalTitle(fmt.Sprintf("%s - Paused", m.Tabs[m.ProgressMode]))
 					return m, tick()
 				}
 
@@ -149,6 +162,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.ProgressStatus == Running {
 			m.ProgressCurrentTime += 1 * time.Second
 			m.ProgressPercent += 1.0 / float64(m.getDurationByIndex(m.ProgressMode).Seconds())
+
+			// Set terminal window to {mode} - {time left}
+			setTerminalTitle(fmt.Sprintf("%s - %s", m.Tabs[m.ProgressMode], m.getTimeLeft(m.ProgressMode)))
+
 			return m, tick()
 		}
 
@@ -156,6 +173,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case progressDoneMsg:
 		m.resetProgress()
+
+		setTerminalTitle(fmt.Sprintf("%s - Done!", m.Tabs[m.ProgressMode]))
 		return m, nil
 	}
 
@@ -239,8 +258,11 @@ func main() {
 	}
 
 	initialModel := initialModel(time.Duration(*pomodoroDurationSeconds)*time.Second, time.Duration(*shortDurationSeconds)*time.Second, time.Duration(*longDurationSeconds)*time.Second)
-
 	p := tea.NewProgram(initialModel, tea.WithAltScreen())
+
+	setTerminalTitle("pomodoro")
+	defer setTerminalTitle("pomodoro")
+
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
