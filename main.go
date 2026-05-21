@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -53,7 +54,7 @@ type model struct {
 type tickMsg struct{}
 type progressDoneMsg struct{}
 
-func initialModel() model {
+func initialModel(pomodoroDuration, shortDuration, longDuration time.Duration) model {
 	return model{
 		Tabs:                     []string{"Pomodoro", "Short break", "Long break"},
 		ActiveTab:                0, // Tabs index
@@ -62,9 +63,9 @@ func initialModel() model {
 		ProgressShort:            progress.New(progress.WithDefaultGradient(), progress.WithoutPercentage()),
 		ProgressLong:             progress.New(progress.WithDefaultGradient(), progress.WithoutPercentage()),
 		ProgressStatus:           Idle,
-		ProgressPomodoroDuration: 5 * time.Second,
-		ProgressShortDuration:    120 * time.Second,
-		ProgressLongDuration:     180 * time.Second,
+		ProgressPomodoroDuration: pomodoroDuration,
+		ProgressShortDuration:    shortDuration,
+		ProgressLongDuration:     longDuration,
 		ProgressCurrentTime:      0,
 		ProgressPercent:          0.0,
 	}
@@ -246,9 +247,22 @@ func (m model) View() string {
 }
 
 func main() {
-	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+	pomodoroDurationSeconds := flag.Int("pomodoro", 60*25, "Pomodoro duration in seconds")
+	shortDurationSeconds := flag.Int("short", 60*5, "Short break duration in seconds")
+	longDurationSeconds := flag.Int("long", 60*15, "Long break duration in seconds")
+	flag.Parse()
+
+	if *pomodoroDurationSeconds <= 0 || *shortDurationSeconds <= 0 || *longDurationSeconds <= 0 {
+		fmt.Println("Duration must be greater than 0")
+		os.Exit(1)
+	}
+
+	initialModel := initialModel(time.Duration(*pomodoroDurationSeconds)*time.Second, time.Duration(*shortDurationSeconds)*time.Second, time.Duration(*longDurationSeconds)*time.Second)
+	p := tea.NewProgram(initialModel, tea.WithAltScreen())
+
 	setTerminalTitle("pomodoro")
 	defer setTerminalTitle("pomodoro")
+
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
